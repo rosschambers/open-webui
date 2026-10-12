@@ -9,6 +9,8 @@
 		delegation_ids?: string[];
 		subagent_chat_id?: string;
 		subagent_chat_ids?: string[];
+		agent_name?: string;
+		agent_names?: string[];
 	};
 
 	const i18n = getContext<Readable<{ t: (value: string) => string }>>('i18n');
@@ -17,6 +19,7 @@
 	export let result: SubagentResult;
 
 	let expanded = false;
+	$: agentLabel = result.agent_name ?? (result.agent_names ?? []).join(', ');
 	$: delegationIds = Array.isArray(result.delegation_ids) ? result.delegation_ids : [];
 	$: delegationLabel =
 		result.delegation_id ?? (delegationIds.length > 1 ? `${delegationIds.length} tasks` : '');
@@ -38,7 +41,7 @@
 		on:click={() => (expanded = !expanded)}
 	>
 		<span class="text-[0.75rem] font-normal shrink-0">
-			{$i18n.t('Background sub-agent finished')}
+			{agentLabel ? `${agentLabel} ${$i18n.t('finished')}` : $i18n.t('Background sub-agent finished')}
 		</span>
 		{#if summary}
 			<span class="text-[0.75rem] truncate min-w-0 flex-1">{summary}</span>
@@ -56,6 +59,15 @@
 				: ''}"
 		/>
 	</button>
+	{#if result.subagent_chat_id}
+		<a
+			href="/c/{result.subagent_chat_id}"
+			class="ml-3 text-[0.6875rem] underline text-gray-400 hover:text-gray-600 dark:text-gray-600 dark:hover:text-gray-400"
+			on:click|stopPropagation
+		>
+			{$i18n.t('Open chat')}
+		</a>
+	{/if}
 	{#if expanded}
 		<div
 			class="mt-2 ml-3 border-l border-gray-100 dark:border-white/8 pl-3 text-[0.78125rem] leading-relaxed text-gray-600 dark:text-gray-400 whitespace-pre-wrap break-words"

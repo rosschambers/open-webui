@@ -54,6 +54,10 @@
 			label: $i18n.t('settings.admin.models.capabilities.memory.label'),
 			description: $i18n.t('settings.admin.models.capabilities.memory.description')
 		},
+		subagent: {
+			label: $i18n.t('Available as sub-agent'),
+			description: $i18n.t('Other chats can delegate tasks to this model by name')
+		},
 		builtin_tools: {
 			label: $i18n.t('settings.admin.models.capabilities.builtinTools.label'),
 			description: $i18n.t('settings.admin.models.capabilities.builtinTools.description')
@@ -67,9 +71,12 @@
 	export let defaultFeatureIds: string[] = [];
 	export let builtinTools: Record<string, boolean> = {};
 	export let disabled = false;
+	// Fork patch: the sub-agent switch is per model, never a global default.
+	export let showSubagent = true;
 	const featureKeys: Capability[] = ['web_search', 'image_generation', 'code_interpreter'];
 	$: visibleCapabilities = (Object.keys(capabilityLabels) as Capability[]).filter(
-		(key) => key !== 'file_context' || capabilities.file_upload
+		(key) =>
+			(key !== 'file_context' || capabilities.file_upload) && (key !== 'subagent' || showSubagent)
 	);
 	$: enabledCapabilityIds = visibleCapabilities.filter((key) => capabilities[key]);
 	$: availableFeatures = featureKeys.filter((key) => capabilities[key]);

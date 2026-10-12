@@ -204,6 +204,7 @@
 						>
 							<Capabilities
 								bind:capabilities={defaultCapabilities}
+								showSubagent={false}
 								bind:defaultFeatureIds
 								bind:builtinTools
 							/>
