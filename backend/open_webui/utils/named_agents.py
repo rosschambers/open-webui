@@ -6,6 +6,7 @@ tools, prompt and skills, and the parent resumes on its own model.
 
 Module level imports nothing from open_webui so the pure helpers are unit-testable.
 """
+
 from __future__ import annotations
 
 import copy
@@ -29,12 +30,23 @@ def agent_entries(models: list[dict]) -> list[dict]:
     for model in models:
         if not is_agent(model) or (model.get('info') or {}).get('is_active') is False:
             continue
-        entries.append({'id': model['id'], 'name': model.get('name') or model['id'], 'description': _meta(model).get('description') or ''})
+        entries.append(
+            {
+                'id': model['id'],
+                'name': model.get('name') or model['id'],
+                'description': ' '.join(str(_meta(model).get('description') or '').split()),
+            }
+        )
     return sorted(entries, key=lambda entry: entry['name'].lower())
 
 
 def inject_agent_parameter(spec: dict, agents: list[dict]) -> None:
-    lines = [f"{agent['id']} — {agent['name']}: {agent['description']}".rstrip(': ') for agent in agents]
+    lines = []
+    for agent in agents:
+        line = f'{agent["id"]} — {agent["name"]}'
+        if agent['description']:
+            line += f': {agent["description"]}'
+        lines.append(line)
     spec.setdefault('parameters', {}).setdefault('properties', {})['agent'] = {
         'type': 'string',
         'enum': [agent['id'] for agent in agents],
@@ -44,6 +56,10 @@ def inject_agent_parameter(spec: dict, agents: list[dict]) -> None:
             'Available agents:\n' + '\n'.join(f'- {line}' for line in lines)
         ),
     }
+    spec['description'] = (
+        'Delegate focused work to a parallel sub-agent. By default it uses the current model and tools; '
+        'set `agent` to hand the task to a named agent with its own model, instructions and tools.'
+    )
 
 
 def remove_agent_parameter(spec: dict) -> None:
@@ -70,7 +86,11 @@ def build_child_run(parent_run: dict, agent: dict, defaults: dict) -> dict[str, 
         'session_id': parent_run.get('session_id'),
         'tool_ids': list(defaults.get('tool_ids') or []),
         'skill_ids': [],
-        'chat_context': {'params': {}, 'messages': [], 'chat_variables': copy.deepcopy(parent_context.get('chat_variables'))},
+        'chat_context': {
+            'params': {},
+            'messages': [],
+            'chat_variables': copy.deepcopy(parent_context.get('chat_variables')),
+        },
         'tool_servers': [],
         'filter_ids': list(defaults.get('filter_ids') or []),
         'terminal_id': defaults.get('terminal_id') or None,

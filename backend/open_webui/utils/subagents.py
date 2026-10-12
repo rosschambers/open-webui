@@ -32,6 +32,17 @@ When done, end with a clear summary:
 - Any issues or open questions
 """
 
+# Named agents (fork patch): the upstream default claims full workspace access, which is
+# wrong for a narrow agent; its own instructions and tools define what it can do.
+NAMED_AGENT_SYSTEM_PROMPT = """You are a named agent working on a specific task delegated by the lead agent.
+Use only the tools you have. Focus exclusively on your assigned task.
+
+When done, end with a clear summary:
+- What you did
+- What you changed (if anything)
+- Any issues or open questions
+"""
+
 MUTATING_MEMORY_TOOLS = {
     'add_memory',
     'delete_memory',
@@ -170,6 +181,15 @@ async def process_pending_internal_messages(
                     combined_meta['subagent_chat_id'] = subagent_chat_ids[0]
                 elif subagent_chat_ids:
                     combined_meta['subagent_chat_ids'] = subagent_chat_ids
+                # Named agents (fork patch): keep the agent names for the result row.
+                agent_names = [
+                    message['meta']['agent_name'] for message in batch if (message.get('meta') or {}).get('agent_name')
+                ]
+                if len(batch) == 1 and agent_names:
+                    combined_meta['agent_id'] = (first.get('meta') or {}).get('agent_id')
+                    combined_meta['agent_name'] = agent_names[0]
+                elif agent_names:
+                    combined_meta['agent_names'] = agent_names
 
             reuse_message = len(batch) == 1 and (first.get('meta') or {}).get('status') != 'pending'
             user_message_id = first['id'] if reuse_message else str(uuid4())
@@ -377,7 +397,11 @@ async def delegate(
         from open_webui.utils.automations import _resolve_model_defaults
         from open_webui.utils.named_agents import build_child_run, list_agents, resolve_agent
 
-        match = resolve_agent(await list_agents(request, UserModel(**user_data)), agent)
+        try:
+            agents = await list_agents(request, UserModel(**user_data))
+        except Exception as exc:
+            return f'Error: could not load agents: {exc}'
+        match = resolve_agent(agents, agent)
         if isinstance(match, str):
             return match
         agent_info = match
@@ -423,7 +447,7 @@ async def delegate(
             ChatForm(
                 chat={
                     'id': chat_id,
-                    'title': f"{agent_info['name']}: {task[:60]}" if agent_info else f'Sub-agent: {task[:60]}',
+                    'title': f'{agent_info["name"]}: {task[:60]}' if agent_info else f'Sub-agent: {task[:60]}',
                     'models': [run['model_id']],
                     'history': {
                         'currentId': assistant_message_id,
@@ -478,8 +502,8 @@ async def delegate(
             child_request.state.max_tool_call_iterations = max_iterations
             chat_context = copy.deepcopy(run.get('chat_context') or {})
             child_request.state.chat_context = chat_context
-            subagent_system_prompt = (
-                str(config.get('subagents.system_prompt') or '').strip() or DEFAULT_SUBAGENT_SYSTEM_PROMPT
+            subagent_system_prompt = str(config.get('subagents.system_prompt') or '').strip() or (
+                NAMED_AGENT_SYSTEM_PROMPT if agent_info else DEFAULT_SUBAGENT_SYSTEM_PROMPT
             )
             form_data = {
                 'model': run['model_id'],
@@ -585,7 +609,7 @@ async def delegate(
             f'Original task: {task}',
         ]
         if agent_info:
-            lines.append(f"Agent: {agent_info['name']}")
+            lines.append(f'Agent: {agent_info["name"]}')
         if context:
             lines.append(f'Context provided: {context}')
         lines.extend(
@@ -729,5 +753,5 @@ async def delegate(
         return f'Error: {result.get("error") or "sub-agent failed."}'
     summary = result.get('summary') or 'Sub-agent produced no output.'
     if agent_info:
-        return f"Agent {agent_info['name']} finished (chat: /c/{chat_id})\n\n{summary}"
+        return f'Agent {agent_info["name"]} finished (chat: /c/{chat_id})\n\n{summary}'
     return summary

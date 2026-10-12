@@ -59,3 +59,14 @@ def test_build_child_run_uses_agent_and_does_not_mutate_parent():
     assert child['skill_ids'] == [] and child['tool_servers'] == []
     assert child['chat_context'] == {'params': {}, 'messages': [], 'chat_variables': {'v': 1}}
     assert child['files'] == [{'id': 'f1'}] and child['session_id'] == 's' and child['folder_id'] == 'fold'
+
+
+def test_descriptions_are_collapsed_and_tool_description_mentions_agents():
+    entries = na.agent_entries([model('a', 'A', description='line one\n  line two'), model('b', 'B')])
+    assert entries[0]['description'] == 'line one line two'
+    spec = {'description': 'Delegate focused work to a parallel sub-agent using the current model and tools.', 'parameters': {'properties': {}}}
+    na.inject_agent_parameter(spec, entries)
+    text = spec['parameters']['properties']['agent']['description']
+    assert '- a — A: line one line two' in text
+    assert '- b — B\n' in text + '\n'
+    assert 'named agent' in spec['description']
