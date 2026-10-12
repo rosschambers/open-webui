@@ -9,8 +9,12 @@ SPEC.loader.exec_module(na)
 
 
 def model(model_id, name, subagent=True, description='', is_active=True, arena=False):
-    return {'id': model_id, 'name': name, 'arena': arena,
-            'info': {'is_active': is_active, 'meta': {'description': description, 'capabilities': {'subagent': subagent}}}}
+    return {
+        'id': model_id,
+        'name': name,
+        'arena': arena,
+        'info': {'is_active': is_active, 'meta': {'description': description, 'capabilities': {'subagent': subagent}}},
+    }
 
 
 def test_is_agent():
@@ -21,13 +25,25 @@ def test_is_agent():
 
 
 def test_agent_entries_sorted_and_filtered():
-    entries = na.agent_entries([model('z', 'Zed', description='last'), model('a', 'alpha'),
-                                model('off', 'Off', is_active=False), model('no', 'No', subagent=False)])
-    assert entries == [{'id': 'a', 'name': 'alpha', 'description': ''}, {'id': 'z', 'name': 'Zed', 'description': 'last'}]
+    entries = na.agent_entries(
+        [
+            model('z', 'Zed', description='last'),
+            model('a', 'alpha'),
+            model('off', 'Off', is_active=False),
+            model('no', 'No', subagent=False),
+        ]
+    )
+    assert entries == [
+        {'id': 'a', 'name': 'alpha', 'description': ''},
+        {'id': 'z', 'name': 'Zed', 'description': 'last'},
+    ]
 
 
 def test_inject_and_remove_agent_parameter():
-    spec = {'description': 'Delegate.', 'parameters': {'type': 'object', 'properties': {'task': {'type': 'string'}}, 'required': ['task']}}
+    spec = {
+        'description': 'Delegate.',
+        'parameters': {'type': 'object', 'properties': {'task': {'type': 'string'}}, 'required': ['task']},
+    }
     na.inject_agent_parameter(spec, [{'id': 'murmur8', 'name': 'Murmur8', 'description': 'tasks and mail'}])
     agent = spec['parameters']['properties']['agent']
     assert agent['enum'] == ['murmur8']
@@ -46,10 +62,25 @@ def test_resolve_agent():
 
 
 def test_build_child_run_uses_agent_and_does_not_mutate_parent():
-    parent = {'model_id': 'flash', 'session_id': 's', 'tool_ids': ['ask_agent', 'server:mcp:n8n'], 'skill_ids': ['x'],
-              'chat_context': {'params': {'system': 'parent prompt'}, 'messages': [{'role': 'system', 'content': 'p'}], 'chat_variables': {'v': 1}},
-              'tool_servers': [{'url': 'u'}], 'filter_ids': ['f'], 'terminal_id': 'exocortex', 'features': {'web_search': True},
-              'files': [{'id': 'f1'}], 'variables': {'a': 1}, 'direct': False, 'folder_id': 'fold'}
+    parent = {
+        'model_id': 'flash',
+        'session_id': 's',
+        'tool_ids': ['ask_agent', 'server:mcp:n8n'],
+        'skill_ids': ['x'],
+        'chat_context': {
+            'params': {'system': 'parent prompt'},
+            'messages': [{'role': 'system', 'content': 'p'}],
+            'chat_variables': {'v': 1},
+        },
+        'tool_servers': [{'url': 'u'}],
+        'filter_ids': ['f'],
+        'terminal_id': 'exocortex',
+        'features': {'web_search': True},
+        'files': [{'id': 'f1'}],
+        'variables': {'a': 1},
+        'direct': False,
+        'folder_id': 'fold',
+    }
     before = copy.deepcopy(parent)
     child = na.build_child_run(parent, {'id': 'home', 'name': 'Home'}, {'tool_ids': ['server:mcp:home-assistant']})
     assert parent == before
@@ -64,9 +95,26 @@ def test_build_child_run_uses_agent_and_does_not_mutate_parent():
 def test_descriptions_are_collapsed_and_tool_description_mentions_agents():
     entries = na.agent_entries([model('a', 'A', description='line one\n  line two'), model('b', 'B')])
     assert entries[0]['description'] == 'line one line two'
-    spec = {'description': 'Delegate focused work to a parallel sub-agent using the current model and tools.', 'parameters': {'properties': {}}}
+    spec = {
+        'description': 'Delegate focused work to a parallel sub-agent using the current model and tools.',
+        'parameters': {'properties': {}},
+    }
     na.inject_agent_parameter(spec, entries)
     text = spec['parameters']['properties']['agent']['description']
     assert '- a — A: line one line two' in text
     assert '- b — B\n' in text + '\n'
     assert 'named agent' in spec['description']
+
+
+def test_models_cache_is_stale():
+    class Row:
+        def __init__(self, model_id, updated_at, subagent=True, base='flash', active=True):
+            self.id, self.updated_at, self.base_model_id, self.is_active = model_id, updated_at, base, active
+            self.meta = type('Meta', (), {'model_dump': lambda _self: {'capabilities': {'subagent': subagent}}})()
+
+    cached = {'a': {'id': 'a', 'info': {'updated_at': 5, 'meta': {'capabilities': {'subagent': True}}}}}
+    assert not na.models_cache_is_stale(cached, [Row('a', 5), Row('plain', 9, subagent=False)])
+    assert na.models_cache_is_stale(cached, [Row('a', 5), Row('new', 9)])  # agent created through the API
+    assert na.models_cache_is_stale(cached, [Row('a', 6)])  # renamed or edited
+    assert na.models_cache_is_stale(cached, [])  # switched off or deleted
+    assert not na.models_cache_is_stale(cached, [Row('a', 5), Row('off', 9, active=False)])

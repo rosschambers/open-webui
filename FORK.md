@@ -36,8 +36,9 @@ is upstream's. No database migration: switching back to the stock image just ign
 by file path, so no backend dependencies are needed). Frontend: `npm run check` must report no new
 errors in the touched files compared with the upstream tag (upstream has thousands of existing ones).
 
-**Known gap:** `list_agents` reads `app.state.MODELS`, which only refreshes when a client loads the
-model list. Agents created through the API are invisible until then; editor-made ones are fine.
+**Model cache:** `list_agents` compares the agent rows in the database with `app.state.MODELS` and
+rebuilds the cache when they differ, so agents created, renamed or switched off through the API show
+up on the next message (fixed in `v0.12.0-agents.2`).
 
 ## Rebasing onto a new upstream release
 

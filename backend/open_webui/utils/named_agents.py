@@ -102,12 +102,34 @@ def build_child_run(parent_run: dict, agent: dict, defaults: dict) -> dict[str, 
     }
 
 
+def models_cache_is_stale(cached_models: Any, database_rows: list[Any]) -> bool:
+    """True when the agent rows in the database differ from the cached model list.
+
+    app.state.MODELS only rebuilds when a client loads the model list, so an agent created,
+    edited or switched off through the API would otherwise stay invisible or out of date.
+    """
+    database_agents = {}
+    for row in database_rows:
+        meta = row.meta.model_dump() if hasattr(row.meta, 'model_dump') else (row.meta or {})
+        if row.base_model_id and row.is_active and (meta.get('capabilities') or {}).get(AGENT_CAPABILITY):
+            database_agents[row.id] = row.updated_at
+    cached_agents = {
+        model['id']: (model.get('info') or {}).get('updated_at')
+        for model in (cached_models or {}).values()
+        if is_agent(model)
+    }
+    return database_agents != cached_agents
+
+
 async def list_agents(request: Any, user: Any) -> list[dict]:
-    """Named agents the user may use, from the server's loaded model list."""
+    """Named agents the user may use, from the server's model list (rebuilt when stale)."""
+    from open_webui.models.models import Models
     from open_webui.utils.models import get_all_models, get_filtered_models
 
-    models = list((getattr(request.app.state, 'MODELS', None) or {}).values())
-    if not models:
+    cached = getattr(request.app.state, 'MODELS', None) or {}
+    if not cached or models_cache_is_stale(cached, await Models.get_all_models()):
         models = await get_all_models(request, user=user)
+    else:
+        models = list(cached.values())
     accessible = await get_filtered_models([model for model in models if is_agent(model)], user)
     return agent_entries(accessible)
