@@ -287,6 +287,7 @@ async def delegate(
     metadata: dict,
     parent_chat_id: str,
     parent_message_id: str | None,
+    agent: str = '',
 ) -> str:
     global _foreground_semaphore
 
@@ -368,6 +369,20 @@ async def delegate(
     else:
         run['files'] = []
 
+    # Named agents (fork patch): the child runs on the agent's model, tools and prompt;
+    # parent_run stays the parent's so a background result resumes on the parent's model.
+    parent_run = run
+    agent_info = None
+    if agent and agent.strip():
+        from open_webui.utils.automations import _resolve_model_defaults
+        from open_webui.utils.named_agents import build_child_run, list_agents, resolve_agent
+
+        match = resolve_agent(await list_agents(request, UserModel(**user_data)), agent)
+        if isinstance(match, str):
+            return match
+        agent_info = match
+        run = build_child_run(parent_run, match, await _resolve_model_defaults(request.app, match['id']))
+
     delegation_id = f'deleg_{uuid4().hex[:8]}'
     foreground_semaphore = None
     if background:
@@ -408,7 +423,7 @@ async def delegate(
             ChatForm(
                 chat={
                     'id': chat_id,
-                    'title': f'Sub-agent: {task[:60]}',
+                    'title': f"{agent_info['name']}: {task[:60]}" if agent_info else f'Sub-agent: {task[:60]}',
                     'models': [run['model_id']],
                     'history': {
                         'currentId': assistant_message_id,
@@ -443,6 +458,7 @@ async def delegate(
                 'parent_message_id': parent_message_id,
                 'delegation_id': delegation_id,
                 'mode': mode,
+                **({'agent_id': agent_info['id'], 'agent_name': agent_info['name']} if agent_info else {}),
             },
         )
         if not chat:
@@ -568,6 +584,8 @@ async def delegate(
             '',
             f'Original task: {task}',
         ]
+        if agent_info:
+            lines.append(f"Agent: {agent_info['name']}")
         if context:
             lines.append(f'Context provided: {context}')
         lines.extend(
@@ -595,6 +613,7 @@ async def delegate(
             'type': 'subagent',
             'delegation_id': delegation_id,
             'subagent_chat_id': chat_id,
+            **({'agent_id': agent_info['id'], 'agent_name': agent_info['name']} if agent_info else {}),
         }
         pending_message = {
             'id': pending_message_id,
@@ -602,7 +621,7 @@ async def delegate(
             'childrenIds': [],
             'role': 'user',
             'content': '\n'.join(lines),
-            'model': run['model_id'],
+            'model': parent_run['model_id'],
             'meta': pending_meta,
             'timestamp': int(time.time()),
         }
@@ -666,7 +685,7 @@ async def delegate(
                 room=f'user:{user.id}',
             )
         if not await has_active_tasks(request.app.state.redis, parent_chat_id):
-            await process_pending_internal_messages(request, parent_chat_id, user.id, run)
+            await process_pending_internal_messages(request, parent_chat_id, user.id, parent_run)
         if cancelled:
             raise asyncio.CancelledError
         return result
@@ -708,4 +727,7 @@ async def delegate(
 
     if result.get('status') != 'completed':
         return f'Error: {result.get("error") or "sub-agent failed."}'
-    return result.get('summary') or 'Sub-agent produced no output.'
+    summary = result.get('summary') or 'Sub-agent produced no output.'
+    if agent_info:
+        return f"Agent {agent_info['name']} finished (chat: /c/{chat_id})\n\n{summary}"
+    return summary

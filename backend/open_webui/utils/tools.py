@@ -875,6 +875,18 @@ async def get_builtin_tools(
             parameters.get('properties', {}).pop('background', None)
             if isinstance(parameters.get('required'), list):
                 parameters['required'] = [name for name in parameters['required'] if name != 'background']
+        if func.__name__ == 'delegate_task':
+            from open_webui.utils import named_agents
+
+            try:
+                agents = await named_agents.list_agents(request, UserModel(**user)) if user else []
+            except Exception as exc:  # never break the chat over the agent list
+                log.warning(f'named agents unavailable: {exc}')
+                agents = []
+            if agents:
+                named_agents.inject_agent_parameter(spec, agents)
+            else:
+                named_agents.remove_agent_parameter(spec)
 
         tools_dict[func.__name__] = {
             'tool_id': f'builtin:{func.__name__}',

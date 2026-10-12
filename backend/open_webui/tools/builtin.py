@@ -1689,6 +1689,7 @@ async def delegate_task(
     context: str = '',
     file_ids: list[str] | None = None,
     background: bool = False,
+    agent: str = '',
     __request__: Request = None,
     __user__: dict = None,
     __metadata__: dict = None,
@@ -1703,6 +1704,7 @@ async def delegate_task(
     :param file_ids: Attached file IDs the sub-agent needs. Use this for images or files;
         do not put file IDs only in context.
     :param background: Return immediately and continue this chat when the sub-agent finishes
+    :param agent: Optional named agent (see the list in the parameter description)
     :return: Foreground result text, or a JSON dispatch handle for background work
     """
     if __request__ is None:
@@ -1722,6 +1724,7 @@ async def delegate_task(
         metadata=__metadata__ or {},
         parent_chat_id=__chat_id__ or '',
         parent_message_id=__message_id__,
+        agent=agent,
     )
 
 
