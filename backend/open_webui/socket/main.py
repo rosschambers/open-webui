@@ -1451,7 +1451,7 @@ async def get_event_emitter(request_info, update_db=True):
                 )
 
             elif event_type == 'files':
-                files = event_data.get('data', {}).get('files', [])
+                files = event_data.get('data', {}).get('files') or []
                 existing_files = await Chats.get_message_metadata(chat_id, message_id, 'files')
                 if isinstance(existing_files, list):
                     files.extend(existing_files)

@@ -33,7 +33,9 @@ is upstream's. No database migration: switching back to the stock image just ign
 | `src/lib/components/chat/Messages/SubagentResultRow.svelte` | "*name* finished" and an Open chat link |
 
 **Tests:** `uv run --no-project --with pytest python -m pytest test/named_agents -q` (the module loads
-by file path, so no backend dependencies are needed). Frontend: `npm run check` must report no new
+by file path, so no backend dependencies are needed). Fork bug fixes outside the patch:
+`uv run --no-project --with pytest --with 'sqlalchemy[asyncio]' --with pydantic python -m pytest test/message_files -q`
+(null message `files` when attaching generated images; `chats.py` loads by path with stubbed imports). Frontend: `npm run check` must report no new
 errors in the touched files compared with the upstream tag (upstream has thousands of existing ones).
 
 **Model cache:** `list_agents` compares the agent rows in the database with `app.state.MODELS` and

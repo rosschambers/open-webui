@@ -1440,7 +1440,7 @@ class ChatTable:
             message_files = []
 
             if message_id in history.get('messages', {}):
-                message_files = history['messages'][message_id].get('files', [])
+                message_files = history['messages'][message_id].get('files') or []
                 message_files = message_files + files
                 history['messages'][message_id]['files'] = message_files
                 message = history['messages'][message_id]
